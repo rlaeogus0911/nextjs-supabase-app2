@@ -117,13 +117,14 @@ Gather는 5-30명 규모의 소규모 이벤트 주최자와 참여자를 위한
   - ✅ UI에서 사용 중인 임시 타입을 실제 DB 스키마 타입으로 교체 (`lib/mappers.ts`, `lib/supabase/database.types.ts`)
   - ⚠️ **알려진 제약**: `app/(main)/events/**`, `app/admin/**`는 여전히 `lib/mock/*` 더미 데이터 사용 중 — 실제 데이터 연동은 Task 009/010/011 범위
 
-- **Task 008: 인증 시스템 및 권한 관리**
-  - Google OAuth 로그인 플로우 완성 (F010)
-  - 사용자 프로필 자동 생성 로직 구현
-  - 관리자 권한 체크 미들웨어 구현 (role: admin)
-  - 보호된 라우트 접근 제어 구현
-  - 로그아웃 기능 구현
-  - Playwright MCP를 활용한 인증 플로우 E2E 테스트
+- **Task 008: 인증 시스템 및 권한 관리** ✅ - 완료 (`docs/tasks/task-008.md` 참고)
+  - ✅ Google OAuth 로그인 플로우 완성 (F010) — 관리자 로그인도 PRD 명세에 맞춰 Google OAuth + role 체크 방식으로 구현(기존 이메일/비밀번호 UI 폐기)
+  - ✅ 사용자 프로필 자동 생성 로직 확인 (`handle_new_user` 트리거가 Task 007에서 선반영되어 있었음을 재검증)
+  - ✅ 관리자 권한 체크 구현 (role: admin) — `proxy.ts`(1차 인증) + `app/admin/(dashboard)/layout.tsx`(2차 role 가드)의 2단계 구조
+  - ✅ 보호된 라우트 접근 제어 구현 (`app/(main)/layout.tsx` 인증 가드)
+  - ✅ 로그아웃 기능 확인 (`components/logout-button.tsx`, 기존 구현 재사용)
+  - ✅ Playwright MCP를 활용한 인증 플로우 E2E 테스트 (자동화 가능한 범위)
+  - ⚠️ **알려진 제약**: 실제 Google OAuth 로그인 완료 후 상태(로그인된 `/events` 진입, 관리자 계정 `/admin/dashboard` 진입)는 Google 동의 화면을 Playwright로 안전하게 자동화할 수 없어 미검증 — 수동 검증 권장(`docs/tasks/task-008.md` 참고). `npm run build`가 기존 환경 이슈(Windows Turbopack 서브프로세스 크래시)로 실패하나 이번 작업과 무관
 
 - **Task 009: 이벤트 CRUD 및 초대 시스템**
   - 이벤트 생성 API 구현 (F001)
