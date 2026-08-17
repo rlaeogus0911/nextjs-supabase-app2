@@ -6,9 +6,10 @@ import { useState } from "react";
 
 interface GoogleAuthButtonProps {
   onError?: (message: string) => void;
+  redirectTo?: string;
 }
 
-export function GoogleAuthButton({ onError }: GoogleAuthButtonProps) {
+export function GoogleAuthButton({ onError, redirectTo }: GoogleAuthButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
@@ -19,7 +20,7 @@ export function GoogleAuthButton({ onError }: GoogleAuthButtonProps) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectTo ?? `${window.location.origin}/auth/callback`,
         },
       });
       if (error) throw error;
