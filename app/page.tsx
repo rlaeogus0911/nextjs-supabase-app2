@@ -30,8 +30,8 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center">
       <div className="flex w-full flex-1 flex-col items-center gap-16">
-        <nav className="flex h-16 w-full justify-center border-b border-b-foreground/10">
-          <div className="flex w-full max-w-5xl items-center justify-between p-3 px-5 text-sm">
+        <nav className="border-b-foreground/10 flex h-14 w-full justify-center border-b sm:h-16">
+          <div className="flex w-full max-w-5xl items-center justify-between p-3 px-4 text-sm sm:px-5">
             <div className="flex items-center gap-5 font-semibold">
               <Link href={"/"}>Gather</Link>
             </div>
@@ -45,20 +45,20 @@ export default function Home() {
           </div>
         </nav>
 
-        <div className="flex max-w-md flex-1 flex-col items-center gap-6 p-5 text-center">
-          <h1 className="text-3xl font-bold">Gather</h1>
-          <p className="text-lg text-muted-foreground">
+        <div className="flex w-full max-w-md flex-1 flex-col items-center gap-6 p-4 text-center sm:gap-8 sm:p-6">
+          <h1 className="text-2xl font-bold sm:text-3xl">Gather</h1>
+          <p className="text-muted-foreground text-base sm:text-lg">
             초대 링크 하나로 모든 것을 해결하는 일회성 이벤트 관리 플랫폼
           </p>
 
-          <div className="grid w-full grid-cols-1 gap-4">
+          <div className="grid w-full grid-cols-1 gap-3 sm:gap-4">
             {FEATURES.map(({ icon: Icon, title, description }) => (
               <Card key={title}>
                 <CardHeader className="flex flex-row items-center gap-3 space-y-0">
-                  <Icon className="size-6 shrink-0 text-primary" />
+                  <Icon className="text-primary size-6 shrink-0" />
                   <CardTitle className="text-base">{title}</CardTitle>
                 </CardHeader>
-                <CardContent className="text-left text-sm text-muted-foreground">
+                <CardContent className="text-muted-foreground text-left text-sm">
                   {description}
                 </CardContent>
               </Card>
@@ -66,7 +66,7 @@ export default function Home() {
           </div>
         </div>
 
-        <footer className="mx-auto flex w-full items-center justify-center gap-8 border-t py-16 text-center text-xs">
+        <footer className="mx-auto flex w-full items-center justify-center gap-8 border-t py-10 text-center text-xs sm:py-16">
           <p>Gather</p>
           <ThemeSwitcher />
         </footer>
