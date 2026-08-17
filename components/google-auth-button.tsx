@@ -20,7 +20,8 @@ export function GoogleAuthButton({ onError, redirectTo }: GoogleAuthButtonProps)
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: redirectTo ?? `${window.location.origin}/auth/callback`,
+          redirectTo:
+            redirectTo ?? `${window.location.origin}/auth/callback?next=/onboarding/nickname`,
         },
       });
       if (error) throw error;

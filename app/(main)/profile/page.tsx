@@ -1,14 +1,31 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LogoutButton } from "@/components/logout-button";
-import { getMockCurrentUser, getMockMyEvents } from "@/lib/mock";
+import { ProfileNicknameEditor } from "@/components/profile-nickname-editor";
+import { createClient } from "@/lib/supabase/server";
+import { getUserProfile } from "@/lib/supabase/get-user-profile";
+import { getEvents } from "@/lib/api/events";
+import { redirect } from "next/navigation";
 
-export default function ProfilePage() {
-  // 목업 단계 - 실제 로그인 사용자 정보는 Task 008 인증 시스템 완성 후 연동
-  const user = getMockCurrentUser();
-  const myEvents = getMockMyEvents();
+export default async function ProfilePage() {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const userId = data?.claims.sub;
+
+  if (!userId) {
+    redirect("/auth/login");
+  }
+
+  const profile = await getUserProfile(supabase, userId);
+  if (!profile) {
+    redirect("/auth/login");
+  }
+
+  const myEvents = await getEvents(supabase, userId);
   const hostedCount = myEvents.filter((e) => e.role === "host").length;
   const participatedCount = myEvents.filter((e) => e.role === "participant").length;
-  const joinedDate = new Date(user.createdAt).toLocaleDateString("ko-KR", {
+
+  const displayName = profile.username ?? profile.full_name ?? profile.email;
+  const joinedDate = new Date(profile.created_at).toLocaleDateString("ko-KR", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -20,30 +37,30 @@ export default function ProfilePage() {
 
       <div className="flex flex-col items-center gap-3">
         <Avatar size="lg" className="size-20">
-          {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name} />}
-          <AvatarFallback className="text-xl">{user.name.slice(0, 1)}</AvatarFallback>
+          {profile.avatar_url && <AvatarImage src={profile.avatar_url} alt={displayName} />}
+          <AvatarFallback className="text-xl">{displayName.slice(0, 1)}</AvatarFallback>
         </Avatar>
-        <p className="text-lg font-semibold">{user.name}</p>
+        <ProfileNicknameEditor userId={userId} nickname={displayName} />
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-lg border bg-card p-4 text-center">
+        <div className="bg-card rounded-lg border p-4 text-center">
           <p className="text-2xl font-bold">{hostedCount}</p>
-          <p className="text-sm text-muted-foreground">주최한 이벤트</p>
+          <p className="text-muted-foreground text-sm">주최한 이벤트</p>
         </div>
-        <div className="rounded-lg border bg-card p-4 text-center">
+        <div className="bg-card rounded-lg border p-4 text-center">
           <p className="text-2xl font-bold">{participatedCount}</p>
-          <p className="text-sm text-muted-foreground">참여한 이벤트</p>
+          <p className="text-muted-foreground text-sm">참여한 이벤트</p>
         </div>
       </div>
 
       <div className="divide-y rounded-lg border">
         <div className="flex items-center justify-between p-4">
-          <span className="text-sm text-muted-foreground">이메일</span>
-          <span className="text-sm">{user.email}</span>
+          <span className="text-muted-foreground text-sm">이메일</span>
+          <span className="text-sm">{profile.email}</span>
         </div>
         <div className="flex items-center justify-between p-4">
-          <span className="text-sm text-muted-foreground">가입일</span>
+          <span className="text-muted-foreground text-sm">가입일</span>
           <span className="text-sm">{joinedDate}</span>
         </div>
       </div>

@@ -1,14 +1,21 @@
 import { Suspense } from "react";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { createClient } from "@/lib/supabase/server";
+import { getUserProfile } from "@/lib/supabase/get-user-profile";
 import { redirect } from "next/navigation";
 
 async function AuthGuard({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
+  const userId = data?.claims.sub;
 
-  if (!data?.claims) {
+  if (!userId) {
     redirect("/auth/login");
+  }
+
+  const profile = await getUserProfile(supabase, userId);
+  if (!profile?.username) {
+    redirect("/onboarding/nickname");
   }
 
   return <>{children}</>;
