@@ -15,24 +15,33 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
+import { createClient } from "@/lib/supabase/client";
+import { deleteEvent } from "@/lib/api/events";
 
 interface EventDeleteDialogProps {
+  eventId: string;
   eventTitle: string;
 }
 
-export function EventDeleteDialog({ eventTitle }: EventDeleteDialogProps) {
+export function EventDeleteDialog({ eventId, eventTitle }: EventDeleteDialogProps) {
   const router = useRouter();
 
-  const handleDelete = () => {
-    // 목업 단계 - 실제 삭제는 Task 009에서 API 연동
-    toast.success("이벤트가 삭제되었습니다.");
-    router.push("/events");
+  const handleDelete = async () => {
+    try {
+      const supabase = createClient();
+      await deleteEvent(supabase, eventId);
+      toast.success("이벤트가 삭제되었습니다.");
+      router.push("/events");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "이벤트 삭제에 실패했습니다.");
+    }
   };
 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" className="flex-1 text-destructive hover:text-destructive">
+        <Button variant="outline" className="text-destructive hover:text-destructive flex-1">
           <TrashIcon className="size-4" />
           이벤트 삭제
         </Button>

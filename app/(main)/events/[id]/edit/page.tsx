@@ -1,14 +1,24 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { EventForm } from "@/components/forms/event-form";
-import { getMockEvents } from "@/lib/mock";
+import { createClient } from "@/lib/supabase/server";
+import { getEventById } from "@/lib/api/events";
 
 export default async function EditEventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const event = getMockEvents().find((e) => e.id === id);
+
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const currentUserId = data?.claims.sub;
+
+  const event = await getEventById(supabase, id);
 
   if (!event) {
     notFound();
+  }
+
+  if (event.createdBy !== currentUserId) {
+    redirect(`/events/${event.id}`);
   }
 
   return (

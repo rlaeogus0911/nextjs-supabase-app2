@@ -28,8 +28,17 @@ export function EventCard({ event, href, role }: EventCardProps) {
 
   return (
     <Link href={href}>
-      <Card className="overflow-hidden transition-colors hover:bg-accent/50">
-        <div className="aspect-video w-full bg-muted" />
+      <Card className="hover:bg-accent/50 overflow-hidden transition-colors">
+        <div className="bg-muted aspect-video w-full overflow-hidden">
+          {event.coverImageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={event.coverImageUrl}
+              alt={`${event.title} 커버 이미지`}
+              className="size-full object-cover"
+            />
+          )}
+        </div>
         <CardHeader>
           <div className="flex items-start justify-between gap-2">
             <CardTitle className="line-clamp-1">{event.title}</CardTitle>
@@ -40,7 +49,7 @@ export function EventCard({ event, href, role }: EventCardProps) {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
+        <CardContent className="text-muted-foreground space-y-2 text-sm">
           <div className="flex items-center gap-2">
             <CalendarIcon className="size-4 shrink-0" />
             <span>{formattedDate}</span>

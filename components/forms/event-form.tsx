@@ -18,11 +18,17 @@ import {
 } from "@/components/ui/form";
 import { createEventSchema, type CreateEventFormValues } from "@/lib/schemas/event";
 import type { Event } from "@/lib/types/event";
+import { createClient } from "@/lib/supabase/client";
+import { createEvent, updateEvent } from "@/lib/api/events";
+import { uploadEventCover } from "@/lib/supabase/storage";
 
 interface EventFormProps {
   mode: "create" | "edit";
   event?: Event;
 }
+
+const MAX_COVER_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_COVER_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
 
 function toDateTimeLocalValue(isoString: string) {
   const date = new Date(isoString);
@@ -34,6 +40,8 @@ function toDateTimeLocalValue(isoString: string) {
 export function EventForm({ mode, event }: EventFormProps) {
   const router = useRouter();
   const [coverPreview, setCoverPreview] = useState<string | null>(event?.coverImageUrl ?? null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<CreateEventFormValues>({
     resolver: zodResolver(createEventSchema),
@@ -49,15 +57,65 @@ export function EventForm({ mode, event }: EventFormProps) {
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setCoverPreview(url);
+
+    const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!ALLOWED_COVER_EXTENSIONS.includes(extension)) {
+      toast.error("jpg, png, webp 형식의 이미지만 업로드할 수 있습니다.");
+      return;
+    }
+    if (file.size > MAX_COVER_SIZE_BYTES) {
+      toast.error("이미지 크기는 5MB 이하여야 합니다.");
+      return;
+    }
+
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
   };
 
-  const onSubmit = (values: CreateEventFormValues) => {
-    // 목업 단계 - 실제 저장은 Task 009에서 API 연동
-    console.log(`[${mode}] event form submit`, values);
-    toast.success(mode === "create" ? "이벤트가 생성되었습니다." : "이벤트가 수정되었습니다.");
-    router.push(mode === "create" ? "/events" : `/events/${event?.id}`);
+  const onSubmit = async (values: CreateEventFormValues) => {
+    setIsSubmitting(true);
+    const supabase = createClient();
+
+    try {
+      const { data } = await supabase.auth.getClaims();
+      const userId = data?.claims.sub;
+
+      if (!userId) {
+        toast.error("로그인이 필요합니다.");
+        router.push("/auth/login");
+        return;
+      }
+
+      let coverImageUrl = values.coverImageUrl || undefined;
+      if (coverFile) {
+        coverImageUrl = await uploadEventCover(supabase, coverFile, userId);
+      }
+
+      const eventInput = {
+        title: values.title,
+        description: values.description,
+        location: values.location,
+        eventDate: new Date(values.eventDate).toISOString(),
+        coverImageUrl,
+      };
+
+      if (mode === "create") {
+        const created = await createEvent(supabase, userId, eventInput);
+        toast.success("이벤트가 생성되었습니다.");
+        form.reset();
+        setCoverFile(null);
+        setCoverPreview(null);
+        router.push(`/events/${created.id}`);
+      } else if (event) {
+        await updateEvent(supabase, event.id, eventInput);
+        toast.success("이벤트가 수정되었습니다.");
+        router.push(`/events/${event.id}`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "요청 처리 중 오류가 발생했습니다.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -65,7 +123,7 @@ export function EventForm({ mode, event }: EventFormProps) {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
         <div className="space-y-2">
           <FormLabel>커버 이미지</FormLabel>
-          <div className="aspect-video w-full overflow-hidden rounded-lg border bg-muted">
+          <div className="bg-muted aspect-video w-full overflow-hidden rounded-lg border">
             {coverPreview && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -100,7 +158,7 @@ export function EventForm({ mode, event }: EventFormProps) {
               <FormLabel>설명</FormLabel>
               <FormControl>
                 <textarea
-                  className="flex min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                  className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-base shadow-sm focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
                   placeholder="이벤트에 대한 설명을 입력하세요"
                   {...field}
                 />
@@ -138,8 +196,8 @@ export function EventForm({ mode, event }: EventFormProps) {
           )}
         />
 
-        <Button type="submit" className="h-12 w-full">
-          {mode === "create" ? "이벤트 생성" : "수정 완료"}
+        <Button type="submit" className="h-12 w-full" disabled={isSubmitting}>
+          {isSubmitting ? "처리 중..." : mode === "create" ? "이벤트 생성" : "수정 완료"}
         </Button>
       </form>
     </Form>

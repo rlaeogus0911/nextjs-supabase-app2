@@ -8,12 +8,9 @@ import { EmptyState } from "@/components/empty-state";
 import { EventDeleteDialog } from "@/components/event-delete-dialog";
 import { EventInviteLink } from "@/components/event-invite-link";
 import { ParticipantCard } from "@/components/participant-card";
-import {
-  getMockEvents,
-  getMockParticipantsByEventId,
-  getMockMyParticipation,
-  MOCK_CURRENT_USER_ID,
-} from "@/lib/mock";
+import { createClient } from "@/lib/supabase/server";
+import { getEventById, getEventParticipants } from "@/lib/api/events";
+import { computeEventStatus } from "@/lib/utils/event-status";
 import type { EventStatus } from "@/lib/types/event";
 
 const STATUS_LABEL: Record<EventStatus, string> = {
@@ -30,15 +27,20 @@ const STATUS_VARIANT: Record<EventStatus, "default" | "secondary" | "outline"> =
 
 export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const event = getMockEvents().find((e) => e.id === id);
+
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const currentUserId = data?.claims.sub;
+
+  const event = await getEventById(supabase, id);
 
   if (!event) {
     notFound();
   }
 
-  const participants = getMockParticipantsByEventId(event.id);
-  const myParticipation = getMockMyParticipation(event.id, MOCK_CURRENT_USER_ID);
-  const isHost = myParticipation?.role === "host";
+  const status = computeEventStatus(event.eventDate);
+  const participants = await getEventParticipants(supabase, event.id);
+  const isHost = currentUserId === event.createdBy;
   const formattedDate = new Date(event.eventDate).toLocaleString("ko-KR", {
     year: "numeric",
     month: "long",
@@ -49,15 +51,24 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
 
   return (
     <div className="space-y-6 p-5">
-      <div className="aspect-video w-full rounded-xl bg-muted" />
+      <div className="bg-muted aspect-video w-full overflow-hidden rounded-xl">
+        {event.coverImageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={event.coverImageUrl}
+            alt={`${event.title} 커버 이미지`}
+            className="size-full object-cover"
+          />
+        )}
+      </div>
 
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">
           <h1 className="text-2xl font-bold">{event.title}</h1>
-          <Badge variant={STATUS_VARIANT[event.status]}>{STATUS_LABEL[event.status]}</Badge>
+          <Badge variant={STATUS_VARIANT[status]}>{STATUS_LABEL[status]}</Badge>
         </div>
-        {event.description && <p className="text-sm text-muted-foreground">{event.description}</p>}
-        <div className="space-y-1 text-sm text-muted-foreground">
+        {event.description && <p className="text-muted-foreground text-sm">{event.description}</p>}
+        <div className="text-muted-foreground space-y-1 text-sm">
           <div className="flex items-center gap-2">
             <CalendarIcon className="size-4 shrink-0" />
             <span>{formattedDate}</span>
@@ -95,7 +106,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
               이벤트 수정
             </Link>
           </Button>
-          <EventDeleteDialog eventTitle={event.title} />
+          <EventDeleteDialog eventId={event.id} eventTitle={event.title} />
         </div>
       ) : (
         <Badge variant="outline" className="w-fit">

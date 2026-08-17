@@ -12,7 +12,8 @@ interface EventInviteLinkProps {
 }
 
 export function EventInviteLink({ inviteCode, shareOnly = false }: EventInviteLinkProps) {
-  const inviteUrl = `https://gather.app/join/${inviteCode}`;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const inviteUrl = `${origin}/join/${inviteCode}`;
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(inviteUrl);
@@ -24,8 +25,8 @@ export function EventInviteLink({ inviteCode, shareOnly = false }: EventInviteLi
   };
 
   return (
-    <div className="space-y-2 rounded-lg border bg-card p-3">
-      <p className="truncate text-sm text-muted-foreground">{inviteUrl}</p>
+    <div className="bg-card space-y-2 rounded-lg border p-3">
+      <p className="text-muted-foreground truncate text-sm">{inviteUrl}</p>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" className="flex-1" onClick={handleCopy}>
           <CopyIcon className="size-4" />
