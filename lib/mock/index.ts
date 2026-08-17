@@ -7,11 +7,3 @@ export {
 } from "./participants";
 export { getMockMyEvents } from "./my-events";
 export type { MyEvent } from "./my-events";
-export {
-  getMockDashboardMetrics,
-  getMockAdminEventRows,
-  getMockAdminUserRows,
-  getMockEventTimeSeries,
-  getMockUserTimeSeries,
-  getMockEventStatusDistribution,
-} from "./admin";

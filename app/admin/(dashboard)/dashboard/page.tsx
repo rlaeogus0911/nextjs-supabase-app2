@@ -8,16 +8,18 @@ import {
 } from "lucide-react";
 
 import { StatsCard } from "@/components/admin/stats-card";
-import { getMockDashboardMetrics } from "@/lib/mock";
+import { getDashboardMetrics } from "@/lib/api/admin";
+import { createClient } from "@/lib/supabase/server";
 
-export default function AdminDashboardPage() {
-  const metrics = getMockDashboardMetrics();
+export default async function AdminDashboardPage() {
+  const supabase = await createClient();
+  const metrics = await getDashboardMetrics(supabase);
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold">대시보드</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           서비스 전반의 주요 지표를 한눈에 확인하세요.
         </p>
       </div>

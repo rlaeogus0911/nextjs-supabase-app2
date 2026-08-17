@@ -1,5 +1,5 @@
 import { AdminPagination } from "@/components/admin/admin-pagination";
-import { RowActionButton } from "@/components/admin/row-action-button";
+import { AdminUserRowActions } from "@/components/admin/admin-user-row-actions";
 import { UsersToolbar } from "@/components/admin/users-toolbar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getMockAdminUserRows } from "@/lib/mock";
+import { getAdminUserRows } from "@/lib/api/admin";
+import { createClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/lib/types/user";
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -24,17 +25,37 @@ const ROLE_VARIANT: Record<UserRole, "secondary" | "default"> = {
   admin: "default",
 };
 
-export default function AdminUsersPage() {
-  const users = getMockAdminUserRows();
+const PAGE_SIZE = 20;
+
+interface AdminUsersPageProps {
+  searchParams: Promise<{ q?: string; role?: string; page?: string }>;
+}
+
+export default async function AdminUsersPage({ searchParams }: AdminUsersPageProps) {
+  const { q, role, page: pageParam } = await searchParams;
+  const page = Number(pageParam) || 1;
+
+  const supabase = await createClient();
+  const [{ rows: users, total }, { data: claims }] = await Promise.all([
+    getAdminUserRows(supabase, {
+      search: q,
+      role: role as UserRole | undefined,
+      page,
+      pageSize: PAGE_SIZE,
+    }),
+    supabase.auth.getClaims(),
+  ]);
+
+  const currentUserId = claims?.claims.sub;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold">사용자 관리</h1>
-        <p className="text-sm text-muted-foreground">가입한 사용자를 검색하고 관리하세요.</p>
+        <p className="text-muted-foreground text-sm">가입한 사용자를 검색하고 관리하세요.</p>
       </div>
 
-      {/* 검색 및 필터 영역 - 동작은 구현되지 않은 정적 마크업 */}
       <UsersToolbar />
 
       <div className="rounded-md border">
@@ -72,7 +93,11 @@ export default function AdminUsersPage() {
                 <TableCell className="text-right">{user.joinedEventsCount}</TableCell>
                 <TableCell>{new Date(user.createdAt).toLocaleDateString("ko-KR")}</TableCell>
                 <TableCell className="text-right">
-                  <RowActionButton ariaLabel={`${user.name} 더보기`} />
+                  <AdminUserRowActions
+                    userId={user.id}
+                    userName={user.name}
+                    isSelf={user.id === currentUserId}
+                  />
                 </TableCell>
               </TableRow>
             ))}
@@ -80,8 +105,12 @@ export default function AdminUsersPage() {
         </Table>
       </div>
 
-      {/* 페이지네이션 - 동작 없는 정적 마크업 */}
-      <AdminPagination totalLabel={`총 ${users.length}명`} ariaLabel="사용자 목록 페이지네이션" />
+      <AdminPagination
+        page={page}
+        totalPages={totalPages}
+        totalLabel={`총 ${total}명`}
+        ariaLabel="사용자 목록 페이지네이션"
+      />
     </div>
   );
 }

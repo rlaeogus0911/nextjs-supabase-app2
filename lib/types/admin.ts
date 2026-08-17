@@ -1,10 +1,6 @@
 import type { EventStatus } from "./event";
 import type { UserRole } from "./user";
 
-/**
- * 임시 타입 - Task 007에서 실제 DB 스키마 타입(generate_typescript_types 생성물)으로 교체 예정
- */
-
 export interface DashboardMetrics {
   eventsToday: number;
   eventsThisWeek: number;
@@ -41,4 +37,23 @@ export type StatsPeriod = "7d" | "30d" | "90d";
 export interface TimeSeriesPoint {
   date: string;
   count: number;
+}
+
+export interface PaginatedResult<T> {
+  rows: T[];
+  total: number;
+}
+
+export interface AdminEventFilters {
+  search?: string;
+  status?: EventStatus;
+  page: number;
+  pageSize: number;
+}
+
+export interface AdminUserFilters {
+  search?: string;
+  role?: UserRole;
+  page: number;
+  pageSize: number;
 }
