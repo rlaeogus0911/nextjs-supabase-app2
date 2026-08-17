@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/empty-state";
 import { EventDeleteDialog } from "@/components/event-delete-dialog";
 import { EventInviteLink } from "@/components/event-invite-link";
 import { ParticipantCard } from "@/components/participant-card";
+import { ParticipantCountRealtime } from "@/components/participant-count-realtime";
 import { createClient } from "@/lib/supabase/server";
 import { getEventById, getEventParticipants } from "@/lib/api/events";
 import { computeEventStatus } from "@/lib/utils/event-status";
@@ -86,7 +87,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       </div>
 
       <div className="space-y-2">
-        <h2 className="text-lg font-semibold">참여자 {participants.length}명</h2>
+        <h2 className="text-lg font-semibold">
+          참여자 <ParticipantCountRealtime eventId={event.id} initialCount={participants.length} />
+          명
+        </h2>
         {participants.length === 0 ? (
           <EmptyState title="아직 참여자가 없습니다" description="초대 링크를 공유해보세요." />
         ) : (

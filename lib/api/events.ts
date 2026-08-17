@@ -4,7 +4,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { toEvent, toEventParticipant } from "@/lib/mappers";
 import { generateInviteCode } from "@/lib/utils/invite-code";
 import type { CreateEventInput, Event, UpdateEventInput } from "@/lib/types/event";
-import type { EventParticipant } from "@/lib/types/participant";
+import type { EventParticipant, ParticipantRole } from "@/lib/types/participant";
 
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
@@ -22,21 +22,24 @@ function toEventFromRowWithCount(row: EventRowWithCount): Event {
   return toEvent(row, participantCount);
 }
 
-/** 현재 사용자가 주최자이거나 참여 중인 이벤트 목록을 조회한다. (F007/F008) */
+/** 현재 사용자가 주최자이거나 참여 중인 이벤트 목록을 role과 함께 조회한다. (F007/F008) */
 export async function getEvents(
   supabase: SupabaseClient<Database>,
   userId: string,
-): Promise<Event[]> {
+): Promise<{ event: Event; role: ParticipantRole }[]> {
   const { data: participations, error: participationError } = await supabase
     .from("event_participants")
-    .select("event_id")
+    .select("event_id, role")
     .eq("user_id", userId);
 
   if (participationError) {
     throw new Error(`참여 이벤트 조회에 실패했습니다: ${participationError.message}`);
   }
 
-  const eventIds = Array.from(new Set((participations ?? []).map((p) => p.event_id)));
+  const roleByEventId = new Map<string, ParticipantRole>(
+    (participations ?? []).map((p) => [p.event_id, p.role as ParticipantRole]),
+  );
+  const eventIds = Array.from(roleByEventId.keys());
 
   if (eventIds.length === 0) {
     return [];
@@ -52,7 +55,30 @@ export async function getEvents(
     throw new Error(`이벤트 목록 조회에 실패했습니다: ${error.message}`);
   }
 
-  return ((data ?? []) as unknown as EventRowWithCount[]).map(toEventFromRowWithCount);
+  return ((data ?? []) as unknown as EventRowWithCount[]).map((row) => ({
+    event: toEventFromRowWithCount(row),
+    role: roleByEventId.get(row.id) ?? "participant",
+  }));
+}
+
+/** 초대 코드로 이벤트를 조회한다. (F004) */
+export async function getEventByInviteCode(
+  supabase: SupabaseClient<Database>,
+  inviteCode: string,
+): Promise<Event | null> {
+  const { data, error } = await supabase
+    .from("events")
+    .select(EVENT_SELECT_WITH_COUNT)
+    .eq("invite_code", inviteCode)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`초대 코드로 이벤트 조회에 실패했습니다: ${error.message}`);
+  }
+
+  if (!data) return null;
+
+  return toEventFromRowWithCount(data as unknown as EventRowWithCount);
 }
 
 /** 이벤트 단건을 조회한다. */

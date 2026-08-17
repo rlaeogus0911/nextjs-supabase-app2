@@ -6,21 +6,49 @@ import { CheckIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
+import { joinEvent } from "@/lib/api/participants";
 
 interface JoinConfirmButtonProps {
   eventId: string;
   eventTitle: string;
+  alreadyJoined: boolean;
 }
 
-export function JoinConfirmButton({ eventId, eventTitle }: JoinConfirmButtonProps) {
+export function JoinConfirmButton({ eventId, eventTitle, alreadyJoined }: JoinConfirmButtonProps) {
   const router = useRouter();
   const [isJoining, setIsJoining] = useState(false);
 
-  const handleJoin = () => {
+  if (alreadyJoined) {
+    return (
+      <Button size="lg" className="w-full" onClick={() => router.push(`/events/${eventId}`)}>
+        이벤트로 이동
+      </Button>
+    );
+  }
+
+  const handleJoin = async () => {
     setIsJoining(true);
-    // 목업 단계 - 실제 참여 처리(중복 참여 방지 포함)는 Task 010에서 API로 연동
-    toast.success(`"${eventTitle}"에 참여했습니다.`);
-    router.push(`/events/${eventId}`);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        toast.error("로그인이 필요합니다.");
+        router.push("/auth/login");
+        return;
+      }
+
+      await joinEvent(supabase, eventId, user.id);
+      toast.success(`"${eventTitle}"에 참여했습니다.`);
+      router.push(`/events/${eventId}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "참여 처리에 실패했습니다.");
+    } finally {
+      setIsJoining(false);
+    }
   };
 
   return (

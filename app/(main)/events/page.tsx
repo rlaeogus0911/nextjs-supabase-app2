@@ -13,11 +13,11 @@ export default async function EventsPage() {
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims.sub;
 
-  const events = userId ? await getEvents(supabase, userId) : [];
+  const results = userId ? await getEvents(supabase, userId) : [];
 
-  const myEvents: MyEvent[] = events.map((event) => ({
+  const myEvents: MyEvent[] = results.map(({ event, role }) => ({
     event: { ...event, status: computeEventStatus(event.eventDate) },
-    role: userId && event.createdBy === userId ? "host" : "participant",
+    role,
   }));
 
   return (
