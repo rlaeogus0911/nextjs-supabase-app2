@@ -1,0 +1,360 @@
+{
+  "tasks": [
+    {
+      "id": "e1f9a2a8-0632-4c97-a1fe-35d7376d4640",
+      "name": "원격 DB 상태 검증 (Realtime/RLS/타입 최신성)",
+      "description": "Supabase MCP와 코드 검색으로 3가지 사실을 확인한다: (1) pg_publication_tables에서 supabase_realtime publication에 events, event_participants가 실제 포함되어 있는지, (2) lib/types/participant.ts 및 관련 코드/PRD에서 참여자 role(host/participant) 변경 UI·API 요구사항이 실제로 존재하는지(event_participants UPDATE RLS 정책 부재가 의도된 설계인지 판단하기 위함), (3) mcp__supabase__generate_typescript_types 실행 결과를 로컬 lib/supabase/database.types.ts와 비교하여 최신 상태인지.",
+      "notes": "execute_sql은 조회 전용으로만 사용. 이 단계에서는 파일을 수정하지 않는다.",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-08-17T03:08:08.256Z",
+      "updatedAt": "2026-08-17T03:15:36.003Z",
+      "relatedFiles": [
+        {
+          "path": "lib/types/participant.ts",
+          "type": "REFERENCE",
+          "description": "ParticipantRole 정의 및 사용처 확인"
+        },
+        {
+          "path": "lib/supabase/database.types.ts",
+          "type": "REFERENCE",
+          "description": "generate_typescript_types 결과와 diff 대상"
+        }
+      ],
+      "implementationGuide": "1) mcp__supabase__execute_sql로 `select * from pg_publication_tables where pubname='supabase_realtime';` 실행\n2) Grep으로 'ParticipantRole' 및 role 변경 관련 UI/함수 사용처 검색 (lib/types/participant.ts, components/, app/(main)/events/[id]/**)\n3) mcp__supabase__generate_typescript_types 실행 후 결과를 Read된 로컬 database.types.ts와 diff\n각 결과를 다음 태스크에 전달할 수 있도록 요약 정리(문서 작성 없이 조사만 수행, 부작용 없는 조회 전용 작업)",
+      "verificationCriteria": "publication 포함 여부, role 변경 요구사항 유무, 타입 diff 결과 3가지가 모두 사실 기반으로 확정되어야 함",
+      "summary": "3가지 사실 모두 확정: (1) pg_publication_tables 조회 결과 events, event_participants 모두 supabase_realtime publication에 포함됨(rowfilter 없음) - gap 없음. (2) 코드베이스 전역 grep(participant-card.tsx, app/(main)/events/[id]/page.tsx) 및 task-004/005.md 검토 결과 참여자 role 변경 UI/로직/요구사항 전무, role은 가입 시 고정값(host=생성자, participant=초대참여자)으로만 읽기 전용 조건분기에 사용됨을 확인 - event_participants UPDATE RLS 정책 부재는 의도된 설계로 결론. (3) generate_typescript_types 결과와 로컬 database.types.ts가 문자 그대로 완전히 동일함을 확인(Row/Insert/Update, FK relationships, PostgrestVersion 14.15까지 일치) - 타입 갱신 불필요. 모두 읽기 전용 조사만 수행했고 파일/DB 수정 없음.",
+      "completedAt": "2026-08-17T03:15:35.996Z"
+    },
+    {
+      "id": "a092907b-e1ef-43a5-9a83-d652b4fb5ea6",
+      "name": "발견된 gap 처리 (조건부: 타입 갱신 및 필요시 마이그레이션)",
+      "description": "이전 태스크에서 확인된 gap을 최소 변경으로 해소한다. database.types.ts가 최신이 아니면 generate_typescript_types 결과로 교체한다. event_participants UPDATE 정책이 실제로 필요한 것으로 확인되면(참여자 role 변경 요구사항이 코드/PRD에 존재하는 경우) mcp__supabase__apply_migration으로 optimize_rls_initplan 패턴((select auth.uid()))을 따르는 정책을 추가한다. 요구사항이 없다면 정책을 추가하지 않고 '의도적 설계'로 결론짓는다.",
+      "notes": "이 태스크의 실제 작업량은 이전 태스크 결과에 따라 0~2건의 파일/마이그레이션 변경으로 결정됨. DDL은 반드시 apply_migration 사용.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "e1f9a2a8-0632-4c97-a1fe-35d7376d4640"
+        }
+      ],
+      "createdAt": "2026-08-17T03:08:08.256Z",
+      "updatedAt": "2026-08-17T03:17:03.676Z",
+      "relatedFiles": [
+        {
+          "path": "lib/supabase/database.types.ts",
+          "type": "TO_MODIFY",
+          "description": "필요시 최신 타입으로 교체"
+        }
+      ],
+      "implementationGuide": "IF database.types.ts가 stale하면: Write로 로컬 파일을 generate_typescript_types 결과로 교체\nIF role 변경 요구사항이 실제로 존재하면: mcp__supabase__apply_migration으로 event_participants UPDATE 정책 추가(명명 규칙은 기존 정책명 패턴 event_participants_update_own 등을 따름), 이후 mcp__supabase__get_advisors({type:'security'}) 및 ({type:'performance'})로 재검증\nELSE: 코드 변경 없이 다음 태스크로",
+      "verificationCriteria": "database.types.ts가 원격 스키마와 일치하고, RLS 정책 추가 시 get_advisors에 신규 경고가 없어야 함",
+      "summary": "선행 태스크(원격 DB 상태 검증)에서 두 조건 모두 gap 없음으로 확정됨: database.types.ts는 generate_typescript_types 결과와 문자 그대로 동일해 교체 불필요, event_participants UPDATE RLS 정책은 참여자 role 변경 요구사항이 코드/문서에 전무하여 추가하지 않고 의도적 설계로 최종 확정. 따라서 이번 태스크는 파일 수정이나 마이그레이션 적용 없이 \"gap 없음, 변경 불필요\"로 마무리함. DDL/파일 변경이 발생하지 않았으므로 get_advisors 재검증도 스킵함(변경이 없으면 기존 advisors 결과가 그대로 유효).",
+      "completedAt": "2026-08-17T03:17:03.669Z"
+    },
+    {
+      "id": "7c85f3cf-959b-42b1-bee1-8804fd6747d4",
+      "name": "docs/tasks/task-007.md 작성",
+      "description": "기존 docs/tasks/task-004.md~006.md와 동일한 표준 포맷(개요/구현 사항/수락 기준/관련 파일)으로 Task 007 문서를 신규 작성한다. 실제 검증된 사실(테이블/RLS/인덱스/버킷/타입/매퍼가 이미 구현되어 있었음, 이번 라운드에서 검증 및 gap 처리한 내용)을 정확히 기록하고, event_participants UPDATE 정책 부재에 대한 결론(의도적 설계 또는 추가함)을 명시한다. 마지막에 UI(app/(main)/events/**, app/admin/**)가 아직 lib/mock/*을 사용 중이며 실제 데이터 연동은 Task 009/010/011 범위임을 '알려진 제약' 섹션으로 명시한다.",
+      "notes": "새로운 포맷을 창안하지 말고 기존 task 파일 포맷을 그대로 재사용",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "a092907b-e1ef-43a5-9a83-d652b4fb5ea6"
+        }
+      ],
+      "createdAt": "2026-08-17T03:08:08.256Z",
+      "updatedAt": "2026-08-17T03:18:09.090Z",
+      "relatedFiles": [
+        {
+          "path": "docs/tasks/task-007.md",
+          "type": "CREATE",
+          "description": "Task 007 완료 문서"
+        },
+        {
+          "path": "docs/tasks/task-006.md",
+          "type": "REFERENCE",
+          "description": "포맷 참고용"
+        }
+      ],
+      "implementationGuide": "기존 docs/tasks/task-006.md를 Read로 참고하여 동일한 마크다운 구조를 사용. 개요(목표/관련 기능/의존성), 구현 사항 체크리스트(모두 ✅ 처리, 검증 근거 각주 형태로 SQL 결과 요약 포함), 수락 기준(측정 가능한 완료 조건 - 예: 'get_advisors security/performance에 스키마 관련 경고 없음'), 관련 파일 목록(lib/supabase/*, lib/mappers.ts, lib/types/*) 순서로 작성",
+      "verificationCriteria": "docs/tasks/task-004~006.md와 동일한 섹션 구조를 갖추고, 모든 서술이 실제 조회/검증 결과에 근거해야 함(추측 금지)",
+      "summary": "docs/tasks/task-006.md와 동일한 표준 포맷(개요/현재 상태/구현 사항/수락 기준/알려진 제약/관련 파일)으로 docs/tasks/task-007.md를 신규 작성함. 12개 적용된 마이그레이션 목록, 테이블/인덱스/RLS/Storage/Realtime/타입 diff 검증 결과를 모두 실제 조회 결과 기반으로 기록했고, event_participants UPDATE 정책 부재를 의도된 설계로 결론지은 근거(grep 결과, task-004/005.md 검토)를 명시했다. 마지막 '알려진 제약' 섹션에 UI가 아직 lib/mock/*을 사용 중이며 실제 데이터 연동은 Task 009/010/011 범위임을 명시해 후속 작업과의 경계를 문서화했다.",
+      "completedAt": "2026-08-17T03:18:09.083Z"
+    },
+    {
+      "id": "009a2c21-838d-4826-92e9-24764cc9ab4b",
+      "name": "docs/ROADMAP.md Task 007 완료 표시",
+      "description": "docs/ROADMAP.md의 '### Task 007: 데이터베이스 스키마 및 Supabase 초기 설정' 헤더에 다른 완료된 Task(003~006)와 동일한 스타일로 '✅ - 완료' 표기를 추가하고, 하위 항목들 앞에 ✅ 체크마크를 붙인다. 필요시 task-004~006처럼 '⚠️ 알려진 제약' 한 줄을 추가해 task-007.md를 참조하도록 한다.",
+      "notes": "다른 Task 항목의 서술 스타일(✅ - 완료, 하위 항목 앞 ✅, docs/tasks/task-XXX.md 참고 문구)을 그대로 따름",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "7c85f3cf-959b-42b1-bee1-8804fd6747d4"
+        }
+      ],
+      "createdAt": "2026-08-17T03:08:08.256Z",
+      "updatedAt": "2026-08-17T03:22:33.618Z",
+      "relatedFiles": [
+        {
+          "path": "docs/ROADMAP.md",
+          "type": "TO_MODIFY",
+          "description": "Task 007 섹션에 완료 표시"
+        }
+      ],
+      "implementationGuide": "Edit 도구로 docs/ROADMAP.md의 110~117번째 줄 부근(Task 007 섹션)을 기존 Task 003~006 표기 스타일과 동일하게 수정",
+      "verificationCriteria": "ROADMAP.md의 Task 007 서술 스타일이 Task 003~006과 일관되어야 함",
+      "summary": "docs/ROADMAP.md의 Task 007 섹션 헤더에 Task 003~006과 동일한 '✅ - 완료 (docs/tasks/task-007.md 참고)' 표기를 추가하고, 하위 7개 구현 항목 전체에 ✅ 체크마크를 붙였다. users를 실제 테이블명인 profiles로 정정하고, UI가 아직 lib/mock/*을 사용 중이라는 '⚠️ 알려진 제약' 한 줄을 다른 완료 Task(004~006)와 동일한 스타일로 추가해 Task 009/010/011과의 경계를 명시했다.",
+      "completedAt": "2026-08-17T03:22:33.612Z"
+    },
+    {
+      "id": "930a5c2c-46df-433e-9723-00c87ed44cb1",
+      "name": "최종 타입 검증",
+      "description": "npm run type-check를 실행하여 database.types.ts 변경(있었다면) 이후에도 lib/mappers.ts, lib/types/*.ts, 이를 참조하는 모든 코드가 타입 에러 없이 컴파일되는지 확인한다.",
+      "notes": "이 태스크는 순수 검증이며 실패 시에만 코드 수정 발생",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "009a2c21-838d-4826-92e9-24764cc9ab4b"
+        }
+      ],
+      "createdAt": "2026-08-17T03:08:08.256Z",
+      "updatedAt": "2026-08-17T03:23:32.840Z",
+      "relatedFiles": [
+        {
+          "path": "lib/mappers.ts",
+          "type": "REFERENCE",
+          "description": "타입 정합성 확인 대상"
+        }
+      ],
+      "implementationGuide": "Bash로 `npm run type-check` 실행, 실패 시 원인 분석 후 관련 타입 파일만 최소 수정",
+      "verificationCriteria": "npm run type-check가 에러 없이 종료되어야 함",
+      "summary": "npm run type-check(tsc --noEmit) 실행 결과 에러 없이 정상 종료됨. database.types.ts는 변경되지 않았고(이전 태스크에서 이미 최신 상태로 확인됨), lib/mappers.ts, lib/types/*.ts 등 모든 관련 코드가 타입 에러 없이 컴파일됨을 확인했다. 수정 사항 없음.",
+      "completedAt": "2026-08-17T03:23:32.833Z"
+    },
+    {
+      "id": "38be72e5-1878-4cd7-9dda-85a981a1d322",
+      "name": "DB 상태 재확인 및 신규 가입 프로필 자동 생성 검증",
+      "description": "Supabase MCP로 profiles 테이블 스키마(role 컬럼 default/CHECK 제약)와 handle_new_user 트리거의 실제 동작을 재확인한다. mcp__supabase__list_tables로 이미 role default='user', CHECK(role IN ('user','admin')) 확인 완료(스키마 변경 불필요 결론)했으므로, 이 태스크에서는 트리거가 실제로 auth.users insert 시 profiles row를 생성하는지 execute_sql(조회 전용)로 기존 2개 profiles row와 auth.users를 대조 검증하고, 결과를 docs/tasks/task-008.md 초안의 '사전 조사' 섹션에 기록한다.",
+      "notes": "execute_sql은 SELECT 조회 전용으로만 사용. DDL 금지. 이 태스크는 문서화 산출물(task-008.md 초안 섹션)만 만들고 코드 변경 없음.",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-08-17T03:43:53.958Z",
+      "updatedAt": "2026-08-17T03:47:38.715Z",
+      "relatedFiles": [
+        {
+          "path": "docs/tasks/task-008.md",
+          "type": "CREATE",
+          "description": "Task 008 작업 문서 신규 생성"
+        },
+        {
+          "path": "docs/tasks/task-007.md",
+          "type": "REFERENCE",
+          "description": "문서 구조 템플릿 참고"
+        }
+      ],
+      "implementationGuide": "1. mcp__supabase__execute_sql로 select count(*) from auth.users 및 select id, email, role from public.profiles를 조회해 두 테이블의 row 수/매핑이 일치하는지 확인.\n2. docs/tasks/task-007.md를 참고해 docs/tasks/task-008.md 파일을 생성하고 '개요', '사전 조사' 섹션에 트리거 검증 결과와 profiles.role 제약 사실을 기록.\n3. 스키마 불일치가 발견되면(이번 조사에서는 발견 안 될 것으로 예상) 별도 마이그레이션 필요 여부를 문서에 명시만 하고 실제 적용은 후속 태스크로 분리.",
+      "verificationCriteria": "docs/tasks/task-008.md 파일이 생성되고 profiles.role 제약(default 'user', CHECK user/admin)과 handle_new_user 트리거 검증 결과가 구체적 수치와 함께 기록되어 있다.",
+      "analysisResult": "Task 008: 인증 시스템 및 권한 관리. Google OAuth 로그인 플로우 완성(F010), profiles.role 기반 관리자 접근 제어, 보호된 라우트 가드, Playwright E2E 테스트를 구현한다. DB 확인 결과 profiles.role은 CHECK 제약('user'|'admin')과 default 'user'가 이미 적용되어 있어 스키마 변경 불필요. PRD.md 9번 항목에 따라 관리자 로그인도 이메일/비밀번호가 아닌 Google OAuth + role 체크 방식으로 확정 — 기존 admin-login-form.tsx(TODO 상태의 이메일/비밀번호 UI)는 GoogleAuthButton 재사용 기반으로 교체한다. GoogleAuthButton에 redirectTo prop을 추가해 콜백(app/auth/callback/route.ts)의 기존 next 파라미터 처리 로직을 실질적으로 활용한다. 인증/role 가드는 proxy.ts(1차 인증 여부만, getClaims 전후 수정 금지 구간 준수)와 각 세그먼트 layout.tsx(2차 role 세분화)의 2단계로 분리한다. 공용 profiles 조회 헬퍼(lib/supabase/get-user-profile.ts)를 신설해 app/(main)/layout.tsx와 app/admin/(dashboard)/layout.tsx가 재사용한다. 완료 후 docs/tasks/task-008.md 작성 및 docs/ROADMAP.md Task 008 항목 체크.",
+      "summary": "docs/tasks/task-008.md 생성 완료. profiles.role 제약(default 'user', CHECK user/admin)을 list_tables로 재확인하고, handle_new_user 트리거 동작을 execute_sql(SELECT 전용)로 auth.users(2건)와 profiles(2건)를 대조해 1:1 매핑 및 role 기본값 정상 반영을 확인, 결과를 사전 조사 섹션에 구체적 수치와 표로 기록했다. DDL/스키마 변경은 발생하지 않았다.",
+      "completedAt": "2026-08-17T03:47:38.707Z"
+    },
+    {
+      "id": "f1cb8fb2-2063-4bf2-b19b-70491eaa0ba7",
+      "name": "GoogleAuthButton redirectTo prop 확장",
+      "description": "components/google-auth-button.tsx의 signInWithOAuth 호출부에서 redirectTo가 `${origin}/auth/callback`으로 하드코딩되어 콜백의 next 파라미터를 활용할 수 없는 문제를 해결한다. redirectTo?: string prop을 추가하고 기본값은 기존 동작을 유지해 하위 호환을 보장한다.",
+      "notes": "기존 login-form.tsx, sign-up-form.tsx 호출부는 prop을 넘기지 않아도 기존과 동일하게 동작해야 한다(회귀 없음).",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-08-17T03:43:53.958Z",
+      "updatedAt": "2026-08-17T03:48:34.016Z",
+      "relatedFiles": [
+        {
+          "path": "components/google-auth-button.tsx",
+          "type": "TO_MODIFY",
+          "description": "redirectTo prop 추가"
+        }
+      ],
+      "implementationGuide": "1. GoogleAuthButtonProps에 redirectTo?: string 추가.\n2. handleGoogleLogin 내부 options.redirectTo를 redirectTo ?? `${window.location.origin}/auth/callback` 형태로 변경.\n3. npm run typecheck로 타입 에러 없음 확인.",
+      "verificationCriteria": "GoogleAuthButton에 redirectTo prop이 추가되고, prop 미전달 시 기존과 동일한 URL로 리다이렉트되며, prop 전달 시 해당 URL로 리다이렉트된다. 타입체크 통과.",
+      "analysisResult": "Task 008: 인증 시스템 및 권한 관리. Google OAuth 로그인 플로우 완성(F010), profiles.role 기반 관리자 접근 제어, 보호된 라우트 가드, Playwright E2E 테스트를 구현한다. DB 확인 결과 profiles.role은 CHECK 제약('user'|'admin')과 default 'user'가 이미 적용되어 있어 스키마 변경 불필요. PRD.md 9번 항목에 따라 관리자 로그인도 이메일/비밀번호가 아닌 Google OAuth + role 체크 방식으로 확정 — 기존 admin-login-form.tsx(TODO 상태의 이메일/비밀번호 UI)는 GoogleAuthButton 재사용 기반으로 교체한다. GoogleAuthButton에 redirectTo prop을 추가해 콜백(app/auth/callback/route.ts)의 기존 next 파라미터 처리 로직을 실질적으로 활용한다. 인증/role 가드는 proxy.ts(1차 인증 여부만, getClaims 전후 수정 금지 구간 준수)와 각 세그먼트 layout.tsx(2차 role 세분화)의 2단계로 분리한다. 공용 profiles 조회 헬퍼(lib/supabase/get-user-profile.ts)를 신설해 app/(main)/layout.tsx와 app/admin/(dashboard)/layout.tsx가 재사용한다. 완료 후 docs/tasks/task-008.md 작성 및 docs/ROADMAP.md Task 008 항목 체크.",
+      "summary": "GoogleAuthButtonProps에 redirectTo?: string를 추가하고 signInWithOAuth options.redirectTo를 redirectTo ?? 기존 기본값으로 변경했다. prop 미전달 시 동작 100% 동일(하위 호환), npm run type-check 통과 확인. 기존 login-form.tsx/sign-up-form.tsx 호출부는 수정하지 않아 회귀 없음.",
+      "completedAt": "2026-08-17T03:48:34.009Z"
+    },
+    {
+      "id": "f66968a2-6954-4f2e-9c45-22ffe7bbb2c0",
+      "name": "관리자 로그인 폼을 Google OAuth 기반으로 교체",
+      "description": "components/admin-login-form.tsx의 TODO 상태 이메일/비밀번호 UI를 PRD.md 9번 항목 명세(Google OAuth 로그인 → role 체크)에 맞춰 GoogleAuthButton 기반으로 재작성한다. redirectTo로 `${origin}/auth/callback?next=/admin/dashboard`를 전달해 관리자 로그인임을 콜백에 알린다.",
+      "notes": "기존 다크 테마 카드 레이아웃(ShieldCheck 아이콘, '관리자 계정으로만 접근 가능합니다' 문구)은 유지하고 내부 폼만 GoogleAuthButton으로 교체. 에러 표시는 login-form.tsx의 error state 패턴을 재사용.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "f1cb8fb2-2063-4bf2-b19b-70491eaa0ba7"
+        }
+      ],
+      "createdAt": "2026-08-17T03:43:53.958Z",
+      "updatedAt": "2026-08-17T03:50:52.945Z",
+      "relatedFiles": [
+        {
+          "path": "components/admin-login-form.tsx",
+          "type": "TO_MODIFY",
+          "description": "Google OAuth 기반으로 재작성"
+        },
+        {
+          "path": "components/login-form.tsx",
+          "type": "REFERENCE",
+          "description": "에러 상태 관리 패턴 참고"
+        },
+        {
+          "path": "docs/PRD.md",
+          "type": "REFERENCE",
+          "description": "9번 관리자 로그인 페이지 명세"
+        }
+      ],
+      "implementationGuide": "1. email/password useState, handleSubmit, Input 2개 제거.\n2. GoogleAuthButton import 후 onError로 에러 메시지 상태 관리(login-form.tsx 패턴 참고).\n3. redirectTo=`${window.location.origin}/auth/callback?next=/admin/dashboard`를 GoogleAuthButton에 전달.\n4. role 체크 실패 시 표시할 PRD 문구('관리자 권한이 없습니다')는 다음 관리자 layout 가드 태스크와 연동 지점(쿼리 파라미터)을 마련.",
+      "verificationCriteria": "admin-login-form.tsx가 GoogleAuthButton을 사용하며 이메일/비밀번호 관련 코드가 완전히 제거된다. 클릭 시 next=/admin/dashboard가 포함된 OAuth 요청이 발생한다.",
+      "analysisResult": "Task 008: 인증 시스템 및 권한 관리. Google OAuth 로그인 플로우 완성(F010), profiles.role 기반 관리자 접근 제어, 보호된 라우트 가드, Playwright E2E 테스트를 구현한다. DB 확인 결과 profiles.role은 CHECK 제약('user'|'admin')과 default 'user'가 이미 적용되어 있어 스키마 변경 불필요. PRD.md 9번 항목에 따라 관리자 로그인도 이메일/비밀번호가 아닌 Google OAuth + role 체크 방식으로 확정 — 기존 admin-login-form.tsx(TODO 상태의 이메일/비밀번호 UI)는 GoogleAuthButton 재사용 기반으로 교체한다. GoogleAuthButton에 redirectTo prop을 추가해 콜백(app/auth/callback/route.ts)의 기존 next 파라미터 처리 로직을 실질적으로 활용한다. 인증/role 가드는 proxy.ts(1차 인증 여부만, getClaims 전후 수정 금지 구간 준수)와 각 세그먼트 layout.tsx(2차 role 세분화)의 2단계로 분리한다. 공용 profiles 조회 헬퍼(lib/supabase/get-user-profile.ts)를 신설해 app/(main)/layout.tsx와 app/admin/(dashboard)/layout.tsx가 재사용한다. 완료 후 docs/tasks/task-008.md 작성 및 docs/ROADMAP.md Task 008 항목 체크.",
+      "summary": "admin-login-form.tsx의 이메일/비밀번호 TODO UI를 완전히 제거하고 GoogleAuthButton 기반으로 재작성했다. redirectTo=`${origin}/auth/callback?next=/admin/dashboard`를 전달해 관리자 로그인 콜백 목적지를 구분했고, 기존 다크 테마 카드 레이아웃(ShieldCheck 아이콘, 안내 문구)은 유지했다. 에러 표시는 login-form.tsx와 동일한 useState 패턴을 재사용했으며, forbidden(권한 없음) 에러 표시는 다음 태스크(관리자 layout role 가드)에서 이어서 연동한다. type-check/lint 통과.",
+      "completedAt": "2026-08-17T03:50:52.939Z"
+    },
+    {
+      "id": "3e0970ac-11af-400a-93f3-356ea716129d",
+      "name": "공용 profiles 조회 헬퍼 신설",
+      "description": "lib/supabase/get-user-profile.ts를 신규 생성해, 인자로 받은 Supabase 클라이언트와 user id로 profiles row(특히 role)를 조회하는 공용 함수를 구현한다. Server Component에서 클라이언트를 전역 변수로 쓰지 않는 규칙을 지키기 위해 클라이언트를 인자로 받는 형태로 설계한다.",
+      "notes": "이 헬퍼는 app/(main)/layout.tsx와 app/admin/(dashboard)/layout.tsx 양쪽에서 재사용된다. lib/mappers.ts의 기존 매퍼 패턴과 일관된 스타일(타입 명시, 순수 함수)을 따른다.",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-08-17T03:43:53.958Z",
+      "updatedAt": "2026-08-17T03:49:25.301Z",
+      "relatedFiles": [
+        {
+          "path": "lib/supabase/get-user-profile.ts",
+          "type": "CREATE",
+          "description": "공용 profiles 조회 헬퍼"
+        },
+        {
+          "path": "lib/supabase/database.types.ts",
+          "type": "REFERENCE",
+          "description": "profiles Row 타입 참고"
+        },
+        {
+          "path": "lib/mappers.ts",
+          "type": "REFERENCE",
+          "description": "기존 매퍼 스타일 참고"
+        }
+      ],
+      "implementationGuide": "1. export async function getUserProfile(supabase, userId) 형태로 profiles 테이블에서 id, role, email 등을 select().eq('id', userId).single() 조회.\n2. 반환 타입은 database.types.ts의 Tables<'profiles'>['Row'] 재사용.\n3. 에러 발생 시(row 없음 등) null 반환하고 호출부에서 처리하도록 설계(예외 throw 금지).",
+      "verificationCriteria": "lib/supabase/get-user-profile.ts가 생성되고 타입체크를 통과하며, profiles.role을 포함한 조회 결과를 반환한다.",
+      "analysisResult": "Task 008: 인증 시스템 및 권한 관리. Google OAuth 로그인 플로우 완성(F010), profiles.role 기반 관리자 접근 제어, 보호된 라우트 가드, Playwright E2E 테스트를 구현한다. DB 확인 결과 profiles.role은 CHECK 제약('user'|'admin')과 default 'user'가 이미 적용되어 있어 스키마 변경 불필요. PRD.md 9번 항목에 따라 관리자 로그인도 이메일/비밀번호가 아닌 Google OAuth + role 체크 방식으로 확정 — 기존 admin-login-form.tsx(TODO 상태의 이메일/비밀번호 UI)는 GoogleAuthButton 재사용 기반으로 교체한다. GoogleAuthButton에 redirectTo prop을 추가해 콜백(app/auth/callback/route.ts)의 기존 next 파라미터 처리 로직을 실질적으로 활용한다. 인증/role 가드는 proxy.ts(1차 인증 여부만, getClaims 전후 수정 금지 구간 준수)와 각 세그먼트 layout.tsx(2차 role 세분화)의 2단계로 분리한다. 공용 profiles 조회 헬퍼(lib/supabase/get-user-profile.ts)를 신설해 app/(main)/layout.tsx와 app/admin/(dashboard)/layout.tsx가 재사용한다. 완료 후 docs/tasks/task-008.md 작성 및 docs/ROADMAP.md Task 008 항목 체크.",
+      "summary": "lib/supabase/get-user-profile.ts를 신규 생성해 getUserProfile(supabase, userId) 공용 헬퍼를 구현했다. 클라이언트를 인자로 받는 순수 함수 형태(전역 변수 금지 규칙 준수), profiles row 없음/에러 시 null 반환(예외 throw 없음), single<ProfileRow>()로 database.types.ts의 Row 타입을 재사용했다. 기존 client.ts/server.ts가 SupabaseClient<Database> 제네릭을 쓰지 않는 프로젝트 관례에 맞춰 파라미터 타입을 SupabaseClient로 유지했다. npm run type-check 통과 확인.",
+      "completedAt": "2026-08-17T03:49:25.290Z"
+    },
+    {
+      "id": "a182ae12-d372-4b1e-87d7-9d9fb71768ee",
+      "name": "proxy.ts 관리자 로그인 경로 예외 처리 및 일반 보호 라우트 레이아웃 가드",
+      "description": "lib/supabase/proxy.ts의 미인증 예외 조건에 /admin/login을 추가해 관리자도 로그인 페이지 자체는 접근 가능하도록 하고(getClaims 전후 수정 금지 구간은 그대로 유지, 조건문 한 줄만 확장), app/(main)/layout.tsx에 Server Component 인증 가드를 추가해 레이아웃 단위 방어를 이중화한다.",
+      "notes": "proxy.ts의 createServerClient~getClaims() 사이는 절대 수정하지 않는다(CLAUDE.md 규칙). 조건문 수정은 getClaims() 호출 이후 리다이렉트 판단 블록에서만 진행.",
+      "status": "completed",
+      "dependencies": [],
+      "createdAt": "2026-08-17T03:43:53.958Z",
+      "updatedAt": "2026-08-17T03:52:09.287Z",
+      "relatedFiles": [
+        {
+          "path": "lib/supabase/proxy.ts",
+          "type": "TO_MODIFY",
+          "description": "관리자 로그인 경로 예외 추가"
+        },
+        {
+          "path": "app/(main)/layout.tsx",
+          "type": "TO_MODIFY",
+          "description": "레이아웃 단위 인증 가드 추가"
+        },
+        {
+          "path": "lib/supabase/server.ts",
+          "type": "REFERENCE",
+          "description": "Server Component용 createClient 재사용"
+        }
+      ],
+      "implementationGuide": "1. proxy.ts의 !request.nextUrl.pathname.startsWith(\"/auth\") 조건 다음에 && !request.nextUrl.pathname.startsWith(\"/admin/login\") 추가.\n2. app/(main)/layout.tsx를 async Server Component로 유지하며 최상단에서 createClient() 생성 후 getClaims() 호출, 미인증 시 redirect('/auth/login') 추가(lib/supabase/server.ts의 createClient 재사용).\n3. 기존 레이아웃의 children 렌더링 구조는 그대로 유지.",
+      "verificationCriteria": "미인증 상태로 /admin/login에 직접 접속 시 리다이렉트되지 않고 페이지가 로드된다. 미인증 상태로 /events, /profile 접속 시 /auth/login으로 리다이렉트된다.",
+      "analysisResult": "Task 008: 인증 시스템 및 권한 관리. Google OAuth 로그인 플로우 완성(F010), profiles.role 기반 관리자 접근 제어, 보호된 라우트 가드, Playwright E2E 테스트를 구현한다. DB 확인 결과 profiles.role은 CHECK 제약('user'|'admin')과 default 'user'가 이미 적용되어 있어 스키마 변경 불필요. PRD.md 9번 항목에 따라 관리자 로그인도 이메일/비밀번호가 아닌 Google OAuth + role 체크 방식으로 확정 — 기존 admin-login-form.tsx(TODO 상태의 이메일/비밀번호 UI)는 GoogleAuthButton 재사용 기반으로 교체한다. GoogleAuthButton에 redirectTo prop을 추가해 콜백(app/auth/callback/route.ts)의 기존 next 파라미터 처리 로직을 실질적으로 활용한다. 인증/role 가드는 proxy.ts(1차 인증 여부만, getClaims 전후 수정 금지 구간 준수)와 각 세그먼트 layout.tsx(2차 role 세분화)의 2단계로 분리한다. 공용 profiles 조회 헬퍼(lib/supabase/get-user-profile.ts)를 신설해 app/(main)/layout.tsx와 app/admin/(dashboard)/layout.tsx가 재사용한다. 완료 후 docs/tasks/task-008.md 작성 및 docs/ROADMAP.md Task 008 항목 체크.",
+      "summary": "proxy.ts의 getClaims() 호출 이후 리다이렉트 판단 블록에만 `/admin/login` 예외 조건을 추가했고(createServerClient~getClaims 구간은 무수정), app/(main)/layout.tsx를 async Server Component로 전환해 매 요청 새로 생성한 createClient()로 getClaims()를 호출, 미인증 시 /auth/login으로 redirect하는 레이아웃 단위 가드를 추가했다. type-check/lint 통과.",
+      "completedAt": "2026-08-17T03:52:09.282Z"
+    },
+    {
+      "id": "70834a15-5035-4f1c-83f4-d03d32d06e0f",
+      "name": "관리자 대시보드 layout에 role 가드 적용",
+      "description": "app/admin/(dashboard)/layout.tsx에 인증 확인 + get-user-profile 헬퍼를 이용한 role 조회를 추가해, role !== 'admin'인 사용자는 로그아웃 처리 후 /admin/login으로 리다이렉트하고 PRD 명세의 '관리자 권한이 없습니다' 에러 메시지를 전달한다.",
+      "notes": "Server Component에서는 signOut을 직접 호출하기 어려우므로, /admin/login?error=forbidden 쿼리 파라미터를 읽어 클라이언트 컴포넌트(admin-login-form.tsx)에서 useEffect로 supabase.auth.signOut()을 트리거하는 방식으로 구현한다.",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "3e0970ac-11af-400a-93f3-356ea716129d"
+        },
+        {
+          "taskId": "f66968a2-6954-4f2e-9c45-22ffe7bbb2c0"
+        },
+        {
+          "taskId": "a182ae12-d372-4b1e-87d7-9d9fb71768ee"
+        }
+      ],
+      "createdAt": "2026-08-17T03:43:53.958Z",
+      "updatedAt": "2026-08-17T03:53:32.238Z",
+      "relatedFiles": [
+        {
+          "path": "app/admin/(dashboard)/layout.tsx",
+          "type": "TO_MODIFY",
+          "description": "role 가드 추가"
+        },
+        {
+          "path": "app/admin/login/page.tsx",
+          "type": "TO_MODIFY",
+          "description": "error 쿼리 파라미터 처리"
+        },
+        {
+          "path": "components/admin-login-form.tsx",
+          "type": "TO_MODIFY",
+          "description": "forbidden 에러 표시 및 자동 로그아웃"
+        }
+      ],
+      "implementationGuide": "1. layout을 async Server Component로 전환.\n2. createClient() 생성 후 getClaims()로 인증 확인, 미인증 시 redirect('/admin/login').\n3. 인증된 경우 getUserProfile(supabase, userId) 호출 → role !== 'admin'이면 redirect('/admin/login?error=forbidden').\n4. app/admin/login/page.tsx 또는 admin-login-form.tsx에서 searchParams의 error=forbidden을 읽어 '관리자 권한이 없습니다' 메시지 표시 + 자동 signOut 처리.",
+      "verificationCriteria": "role='user' 계정으로 /admin/dashboard 접근 시 /admin/login?error=forbidden으로 리다이렉트되고 에러 메시지가 표시되며 세션이 로그아웃된다. role='admin' 계정은 정상적으로 대시보드에 진입한다.",
+      "analysisResult": "Task 008: 인증 시스템 및 권한 관리. Google OAuth 로그인 플로우 완성(F010), profiles.role 기반 관리자 접근 제어, 보호된 라우트 가드, Playwright E2E 테스트를 구현한다. DB 확인 결과 profiles.role은 CHECK 제약('user'|'admin')과 default 'user'가 이미 적용되어 있어 스키마 변경 불필요. PRD.md 9번 항목에 따라 관리자 로그인도 이메일/비밀번호가 아닌 Google OAuth + role 체크 방식으로 확정 — 기존 admin-login-form.tsx(TODO 상태의 이메일/비밀번호 UI)는 GoogleAuthButton 재사용 기반으로 교체한다. GoogleAuthButton에 redirectTo prop을 추가해 콜백(app/auth/callback/route.ts)의 기존 next 파라미터 처리 로직을 실질적으로 활용한다. 인증/role 가드는 proxy.ts(1차 인증 여부만, getClaims 전후 수정 금지 구간 준수)와 각 세그먼트 layout.tsx(2차 role 세분화)의 2단계로 분리한다. 공용 profiles 조회 헬퍼(lib/supabase/get-user-profile.ts)를 신설해 app/(main)/layout.tsx와 app/admin/(dashboard)/layout.tsx가 재사용한다. 완료 후 docs/tasks/task-008.md 작성 및 docs/ROADMAP.md Task 008 항목 체크.",
+      "summary": "app/admin/(dashboard)/layout.tsx를 async Server Component로 전환해 getClaims()로 인증 확인 후 getUserProfile 헬퍼로 role을 조회, role!=='admin'이면 /admin/login?error=forbidden으로 redirect하도록 구현했다. app/admin/login/page.tsx는 Promise 기반 searchParams(Next.js 16 규칙)를 await해 forbidden 여부를 AdminLoginForm에 prop으로 전달하고, admin-login-form.tsx는 forbidden=true일 때 '관리자 권한이 없습니다' 메시지를 표시하고 useEffect에서 브라우저 클라이언트로 signOut을 트리거해 세션을 정리한다. type-check/lint 통과.",
+      "completedAt": "2026-08-17T03:53:32.177Z"
+    },
+    {
+      "id": "95496500-5392-4396-99c3-8bf004d268c0",
+      "name": "Playwright MCP E2E 테스트 및 문서 마무리",
+      "description": "Playwright MCP로 인증/권한 플로우 전체를 검증하고, docs/tasks/task-008.md를 완성하며 docs/ROADMAP.md의 Task 008 항목을 체크 표시로 갱신한다.",
+      "notes": "관리자 테스트 계정 준비를 위해 mcp__supabase__execute_sql로 기존 테스트 계정의 profiles.role을 'admin'으로 UPDATE한다(조회 전용 제약은 DDL에만 적용, 단순 데이터 UPDATE는 execute_sql로 처리).",
+      "status": "completed",
+      "dependencies": [
+        {
+          "taskId": "70834a15-5035-4f1c-83f4-d03d32d06e0f"
+        },
+        {
+          "taskId": "38be72e5-1878-4cd7-9dda-85a981a1d322"
+        }
+      ],
+      "createdAt": "2026-08-17T03:43:53.958Z",
+      "updatedAt": "2026-08-17T03:57:29.965Z",
+      "relatedFiles": [
+        {
+          "path": "docs/tasks/task-008.md",
+          "type": "TO_MODIFY",
+          "description": "테스트 결과 및 최종 요약 기록"
+        },
+        {
+          "path": "docs/ROADMAP.md",
+          "type": "TO_MODIFY",
+          "description": "Task 008 완료 체크"
+        }
+      ],
+      "implementationGuide": "1. Playwright MCP로 다음 시나리오 실행: (a) 일반 로그인 → /events 진입 → 로그아웃 → /auth/login 리다이렉트 확인, (b) 미인증 상태 /events, /profile, /admin/dashboard 직접 접근 시 리다이렉트 확인, (c) role='user' 계정으로 /admin/login 시도 → forbidden 에러 확인, (d) role='admin'으로 갱신된 계정으로 /admin/dashboard 정상 진입 확인.\n2. 각 시나리오 결과를 docs/tasks/task-008.md의 '테스트 체크리스트' 섹션에 기록.\n3. npm run check-all, npm run build로 최종 검증.\n4. docs/ROADMAP.md Task 008 항목에 체크 표시 및 하위 체크박스 반영.",
+      "verificationCriteria": "4가지 E2E 시나리오가 모두 Playwright로 통과하고 task-008.md에 결과가 기록되며, ROADMAP.md Task 008이 체크 완료 상태로 갱신된다. npm run check-all, npm run build가 에러 없이 통과한다.",
+      "analysisResult": "Task 008: 인증 시스템 및 권한 관리. Google OAuth 로그인 플로우 완성(F010), profiles.role 기반 관리자 접근 제어, 보호된 라우트 가드, Playwright E2E 테스트를 구현한다. DB 확인 결과 profiles.role은 CHECK 제약('user'|'admin')과 default 'user'가 이미 적용되어 있어 스키마 변경 불필요. PRD.md 9번 항목에 따라 관리자 로그인도 이메일/비밀번호가 아닌 Google OAuth + role 체크 방식으로 확정 — 기존 admin-login-form.tsx(TODO 상태의 이메일/비밀번호 UI)는 GoogleAuthButton 재사용 기반으로 교체한다. GoogleAuthButton에 redirectTo prop을 추가해 콜백(app/auth/callback/route.ts)의 기존 next 파라미터 처리 로직을 실질적으로 활용한다. 인증/role 가드는 proxy.ts(1차 인증 여부만, getClaims 전후 수정 금지 구간 준수)와 각 세그먼트 layout.tsx(2차 role 세분화)의 2단계로 분리한다. 공용 profiles 조회 헬퍼(lib/supabase/get-user-profile.ts)를 신설해 app/(main)/layout.tsx와 app/admin/(dashboard)/layout.tsx가 재사용한다. 완료 후 docs/tasks/task-008.md 작성 및 docs/ROADMAP.md Task 008 항목 체크.",
+      "summary": "Playwright MCP로 자동화 가능한 시나리오(미인증 /events, /profile, /admin/dashboard 리다이렉트, /admin/login 예외 접근, /admin/login?error=forbidden 메시지 렌더링)를 모두 검증했다. 구현 중 Next.js 16 cacheComponents 규칙 위반(searchParams를 Suspense 없이 접근)을 콘솔 에러로 발견해 app/admin/login/page.tsx를 Suspense 래핑으로 수정했다. 실제 Google OAuth 로그인 완료 후 상태(로그인된 세션, admin role 대시보드 진입)는 Google 동의 화면을 안전하게 자동화할 수 없어(Task 004~006과 동일한 기존 프로젝트 제약) Playwright로 미검증 — 대신 mcp__supabase__execute_sql로 테스트 계정(rlaeogus0911@gmail.com)의 role을 'admin'으로 갱신해 수동 검증이 가능하도록 준비했고, 이 제약을 task-008.md/ROADMAP.md에 명시했다. npm run type-check/lint는 통과했으나 npm run build는 이번 변경과 무관한 기존 환경 이슈(Windows Turbopack 서브프로세스 크래시, exit 0xc0000142)로 실패해 별도 이슈로 문서화했다. docs/tasks/task-008.md와 docs/ROADMAP.md Task 008 항목을 완료 상태로 갱신했다.",
+      "completedAt": "2026-08-17T03:57:29.961Z"
+    }
+  ]
+}
