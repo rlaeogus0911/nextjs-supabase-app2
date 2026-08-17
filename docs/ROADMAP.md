@@ -145,13 +145,14 @@ Gather는 5-30명 규모의 소규모 이벤트 주최자와 참여자를 위한
   - ✅ 실 계정 2개(주최자/참여자)로 수동 검증 완료: 초대 참여, 중복 참여 방지, host/participant role 표시, 참여자 수 Realtime 갱신 모두 정상 동작 확인(`docs/tasks/task-010.md` "수동 검증 완료" 참고)
   - ⚠️ **알려진 제약**: 수동 검증 과정에서 Next.js 16 `cacheComponents`(dynamicIO) 관련 렌더링 차단 버그 2건을 발견해 함께 수정함(`app/join/[invite_code]/loading.tsx` 신설, `app/(main)/layout.tsx`의 인증 체크/`MobileBottomNav`를 `<Suspense>`로 분리) — 상세는 `docs/tasks/task-010.md` 참고. `/join/[invite_code]`도 `proxy.ts` 인증 가드 대상이라 비로그인 미리보기가 불가능한 점은 후속 검토 필요 항목으로 남음
 
-- **Task 011: 관리자 대시보드 백엔드 구현**
-  - 대시보드 지표 집계 쿼리 구현 (F012)
-  - 이벤트 관리 테이블 검색/필터/삭제 API 구현 (F013)
-  - 사용자 관리 테이블 검색/필터/삭제 API 구현 (F014)
-  - 통계 데이터 집계 및 그래프 데이터 API 구현 (F015)
-  - 페이지네이션 및 정렬 로직 구현
-  - Playwright MCP를 활용한 관리자 기능 통합 테스트
+- **Task 011: 관리자 대시보드 백엔드 구현** ✅ - 완료 (`docs/tasks/task-011.md` 참고)
+  - ✅ 대시보드 지표 집계 쿼리 구현 (F012)
+  - ✅ 이벤트 관리 테이블 검색/필터/삭제 API 구현 (F013)
+  - ✅ 사용자 관리 테이블 검색/필터/삭제 API 구현 (F014)
+  - ✅ 통계 데이터 집계 및 그래프 데이터 API 구현 (F015)
+  - ✅ 페이지네이션 및 정렬 로직 구현
+  - ✅ Playwright MCP를 활용한 관리자 기능 통합 테스트 (자동화 가능한 범위 — 비로그인 리다이렉트) + 실 관리자 계정으로 대시보드/검색·필터/삭제/통계 기간 전환 수동 검증 완료
+  - ⚠️ **알려진 제약**: 사용자 삭제는 `profiles` row만 삭제하고 `auth.users`는 남김(service role key 미도입, 범위 제외 협의됨). 관리자 사이드바 로그아웃 버튼은 Task 006/008에서 남겨진 기존 TODO로 이번 범위 아님. `docs/tasks/task-011.md` 참고
 
 - **Task 012: 핵심 기능 통합 테스트**
   - Playwright MCP를 사용한 전체 사용자 플로우 테스트
